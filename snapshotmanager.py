@@ -28,6 +28,7 @@ def parseargs():
     mexclusion.add_argument('-s', '--snapshot', help = 'Snapshot entire openstack cluster')
     mexclusion.add_argument('-r', '--restore', help = 'Restore entire openstack cluster')
     mexclusion.add_argument('-l', '--list', action = 'store_true', help = 'List openstack cluster snapshots')
+    mexclusion.add_argument('-a', '--assign', action = 'store_true', help = 'Assign openstack floating ip addresses')
     mexclusion.add_argument('-d', '--delete', help = 'Delete snapshot')
     parser.add_argument('-v', '--verbose', action = 'store_true')
     groupSnapshot.add_argument('-e', '--exclude', help = 'Exclude instances from snapshotting')
@@ -165,6 +166,23 @@ def deleteSnapshot(name):
     else:
         print 'No such snapshot'
 
+def assignFloatingIp():
+    """ builds map server - floating ip from config and assigns ip to the servers """
+    # Nova authentication
+    creds = getNovaCreds()
+    nova = novaclient.Client("1.1", **creds)
+    floatingip_map = configParse(CONFIG, 'float_ip')['float_ip']
+    for server, ip in floatingip_map.iteritems():
+        if ip:
+            try:
+                instance = nova.servers.find(name = server)
+                instance.add_floating_ip(ip)
+            except novaclient.exceptions.NotFound, e:
+                if VERBOSE: print e
+                continue
+            except (novaclient.exceptions.BadRequest, novaclient.exceptions.NoUniqueMatch):
+                continue
+
 def restoreSnapshots(snapshotName, key_name):
     # exit if no such snapshot exists
     if not snapshotName in listSnapshotsVersions():
@@ -222,9 +240,8 @@ def main():
         else:
             key_name = configParse(CONFIG, 'Nova')['Nova']['default_key']
         restoreSnapshots(params['restore'], key_name)
-    if params['delete']:
-        deleteSnapshot(params['delete'])
-
+    if params['delete']: deleteSnapshot(params['delete'])
+    if params['assign']: assignFloatingIp()
 
 if __name__ == '__main__':
     params = parseargs()
